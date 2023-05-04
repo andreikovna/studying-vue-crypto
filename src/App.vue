@@ -1,6 +1,7 @@
 <template>
   <div class="container mx-auto flex flex-col items-center bg-gray-100 p-4">
-    <!-- <div
+    <div
+      v-if="downloading"
       class="fixed w-100 h-100 opacity-80 bg-purple-800 inset-0 z-50 flex items-center justify-center"
     >
       <svg
@@ -23,7 +24,7 @@
           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
         ></path>
       </svg>
-    </div> -->
+    </div>
     <div class="container">
       <section>
         <div class="flex">
@@ -35,6 +36,7 @@
               <input
                 v-model="ticker"
                 v-on:keydown.enter="add"
+                v-on:input="findCoins"
                 type="text"
                 name="wallet"
                 id="wallet"
@@ -43,30 +45,21 @@
               />
             </div>
             <div
+              v-if="suggestedCoins.length"
               class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
             >
               <span
+                v-for="item in suggestedCoins"
+                :key="item"
+                @click="fillTicker(item)"
                 class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
               >
-                BTC
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                DOGE
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                BCH
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                CHD
+                {{ item }}
               </span>
             </div>
-            <div class="text-sm text-red-600">Такой тикер уже добавлен</div>
+            <div v-if="error" class="text-sm text-red-600">
+              Такой тикер уже добавлен
+            </div>
           </div>
         </div>
         <button
@@ -189,16 +182,34 @@ export default {
       selectedTicker: null,
       intervals: [],
       graph: [],
+      allCoins: [],
+      suggestedCoins: [],
+      error: false,
+      downloading: true,
     };
   },
+
+  created: async function () {
+    this.downloading = true;
+    const res = await fetch(
+      "https://min-api.cryptocompare.com/data/all/coinlist?summary=true"
+    );
+    const data = await res.json();
+    this.allCoins = Object.keys(data.Data);
+    this.downloading = false;
+  },
+
   methods: {
     add() {
       const newTicker = {
-        name: this.ticker,
+        name: this.ticker.toUpperCase(),
         price: "-",
       };
       if (!this.tickers.find((item) => item.name === newTicker.name)) {
         this.tickers.push(newTicker);
+      } else {
+        this.error = true;
+        return;
       }
       const interval = setInterval(async () => {
         const res = await fetch(
@@ -214,6 +225,33 @@ export default {
       }, 5000);
       this.intervals.push({ id: newTicker.name, intervalToStop: interval });
       this.ticker = "";
+      this.suggestedCoins = [];
+    },
+
+    fillTicker(tickerName) {
+      this.ticker = tickerName;
+      this.add();
+    },
+
+    findCoins(event) {
+      this.error = false;
+      if (!event.target.value) {
+        this.suggestedCoins = [];
+        return;
+      }
+      const regex = new RegExp(event.target.value.toLowerCase());
+      const filteredItems = this.allCoins.filter((item) =>
+        item.toLowerCase().match(regex)
+      );
+      const findItem = filteredItems.find(
+        (item) => item.toLowerCase() === event.target.value.toLowerCase()
+      );
+      this.suggestedCoins = findItem
+        ? [
+            findItem,
+            ...filteredItems.filter((item) => item !== findItem).slice(0, 3),
+          ]
+        : filteredItems.slice(0, 4);
     },
 
     select(ticker) {
