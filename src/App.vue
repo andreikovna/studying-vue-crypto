@@ -191,6 +191,7 @@ export default {
 
   created: async function () {
     this.downloading = true;
+
     const res = await fetch(
       "https://min-api.cryptocompare.com/data/all/coinlist?summary=true"
     );
@@ -199,7 +200,28 @@ export default {
     this.downloading = false;
   },
 
+  mounted() {
+    const savedTickers = localStorage.getItem("savedTickers");
+    this.tickers = savedTickers ? JSON.parse(savedTickers) : [];
+    this.tickers.forEach((item) => this.subscribeToPriceUpdating(item));
+  },
+
   methods: {
+    subscribeToPriceUpdating({ name }) {
+      const interval = setInterval(async () => {
+        const res = await fetch(
+          `https://min-api.cryptocompare.com/data/price?fsym=${name}&tsyms=USD&api_key=61bc06ce489205db171aedfeb2dc16c85054258a99af332d1b0f7eef99d21b74`
+        );
+        const data = await res.json();
+        this.tickers.find((item) => item.name === name).price = data.USD;
+
+        if (this.selectedTicker?.name === name) {
+          this.graph.push(data.USD);
+        }
+      }, 5000);
+      this.intervals.push({ id: name, intervalToStop: interval });
+    },
+
     add() {
       const newTicker = {
         name: this.ticker.toUpperCase(),
@@ -211,21 +233,10 @@ export default {
         this.error = true;
         return;
       }
-      const interval = setInterval(async () => {
-        const res = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${newTicker.name}&tsyms=USD&api_key=61bc06ce489205db171aedfeb2dc16c85054258a99af332d1b0f7eef99d21b74`
-        );
-        const data = await res.json();
-        this.tickers.find((item) => item.name === newTicker.name).price =
-          data.USD;
-
-        if (this.selectedTicker?.name === newTicker.name) {
-          this.graph.push(data.USD);
-        }
-      }, 5000);
-      this.intervals.push({ id: newTicker.name, intervalToStop: interval });
+      this.subscribeToPriceUpdating(newTicker);
       this.ticker = "";
       this.suggestedCoins = [];
+      this.saveDataToLS();
     },
 
     fillTicker(tickerName) {
@@ -271,12 +282,17 @@ export default {
       );
       clearInterval(intervalToStop);
       this.tickers = this.tickers.filter((item) => item !== tickerToDelete);
+      this.saveDataToLS();
     },
 
     normalizeGraph() {
       const min = Math.min(...this.graph);
       const max = Math.max(...this.graph);
       return this.graph.map((item) => (5 + (item - min) * 95) / (max - min));
+    },
+
+    saveDataToLS() {
+      localStorage.setItem("savedTickers", JSON.stringify(this.tickers));
     },
   },
 };
